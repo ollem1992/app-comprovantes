@@ -18,7 +18,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 st.title("📄 Divisor de Comprovantes")
-st.write("Faça o upload do PDF e da planilha para separar as guias automaticamente.")
+st.write("Faça o upload do PDF e da planilha para separar os comprovantes automaticamente.")
 
 # --- Funções Auxiliares ---
 def string_para_float(valor_str):
