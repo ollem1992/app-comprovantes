@@ -73,8 +73,32 @@ if pdf_file and excel_file:
                 df['NOME_ARQUIVO'] = df['FILIAL'] + '_' + df['NF']
 
                 valor_para_nomes = defaultdict(list)
-                for _, row in df.iterrows():
-                    valor_para_nomes[row['VALOR_CHAVE']].append(row['NOME_ARQUIVO'])
+
+for _, row in df.iterrows():
+
+    uf = str(row.get('UF', '')).strip().upper()
+    nome = row['NOME_ARQUIVO']
+
+    # ===== REGRA ESPECIAL DE ALAGOAS =====
+    if uf == 'AL':
+
+        # adiciona Valor 1 separadamente
+        if row['_v1'] > 0:
+            valor_para_nomes[round(row['_v1'], 2)].append(nome)
+
+        # adiciona Valor 2 separadamente
+        if row['_v2'] > 0:
+            valor_para_nomes[round(row['_v2'], 2)].append(nome)
+
+    # ===== REGRA NORMAL =====
+    else:
+        valor_total = round(
+            row['_v1'] + row['_v2'] + row['_jr'],
+            2
+        )
+
+        if valor_total > 0:
+            valor_para_nomes[valor_total].append(nome)
                     
             except Exception as e:
                 st.error(f"Erro ao ler a planilha. Verifique as colunas. Detalhe: {e}")
