@@ -9,7 +9,6 @@ from collections import defaultdict
 # --- Configuração Minimalista e Dark ---
 st.set_page_config(page_title="Divisor de Comprovantes", page_icon="📄", layout="centered")
 
-# Esconde o menu padrão e o rodapé para deixar com menos elementos e mais limpo
 st.markdown("""
     <style>
     #MainMenu {visibility: hidden;}
@@ -35,16 +34,35 @@ def string_para_float(valor_str):
     except ValueError: return 0.0
 
 def extrair_valor_do_texto(texto_pagina):
-    match = re.search(r"(?:Valor\s+do\s+documento|Valor\s+pago|Valor|Total(?:\s+a\s+pagar)?)[^\dR$]*R\$?\s*([\d\.,]+)", texto_pagina, re.IGNORECASE)
-    if match: 
-        v = string_para_float(match.group(1))
-        if v > 0: return v
+    # 1. Procura TODAS as ocorrências de palavras-chave (não só a primeira)
+    matches = re.findall(r"(?:Valor\s+do\s+documento|Valor\s+pago|Valor\s+cobrado|Valor|Total(?:\s+a\s+pagar)?)[^\dR$]*R\$?\s*([\d\.,]+)", texto_pagina, re.IGNORECASE)
+    
+    valores_validos = []
+    if matches:
+        for v_str in matches:
+            v = string_para_float(v_str)
+            if v > 0:
+                valores_validos.append(v)
+    
+    if valores_validos:
+        return max(valores_validos) # Pega o maior valor encontrado (ignora campos de desconto zerados)
         
+    # 2. Fallback: Qualquer valor na página com R$
     valores_encontrados = re.findall(r'R\$\s*([\d\.,]{3,})', texto_pagina)
     if valores_encontrados:
         valores_float = [string_para_float(v) for v in valores_encontrados]
         valores_validos = [v for v in valores_float if v > 0]
-        if valores_validos: return max(valores_validos)
+        if valores_validos: 
+            return max(valores_validos)
+
+    # 3. Fallback Extremo para comprovantes que não usam "R$" (Ex: Itaú)
+    numeros_soltos = re.findall(r'\b\d{1,3}(?:\.\d{3})*,\d{2}\b', texto_pagina)
+    if numeros_soltos:
+        floats_soltos = [string_para_float(n) for n in numeros_soltos]
+        floats_validos = [f for f in floats_soltos if f > 0]
+        if floats_validos: 
+            return max(floats_validos)
+
     return None
 
 # --- Upload dos Arquivos ---
@@ -64,7 +82,7 @@ if pdf_file and excel_file:
                 df['_v2'] = df['VALOR 2'].apply(string_para_float) if 'VALOR 2' in df.columns else 0.0
                 df['_jr'] = df['JUROS/MULTA'].apply(string_para_float) if 'JUROS/MULTA' in df.columns else 0.0
                 
-                # Identifica a coluna UF para aplicar as regras de exceção
+                # Identifica a coluna UF
                 if 'UF' in df.columns:
                     df['UF'] = df['UF'].astype(str).str.strip().str.upper()
                 else:
@@ -86,7 +104,6 @@ if pdf_file and excel_file:
                     
                     # REGRA DE EXCEÇÃO: ALAGOAS (AL)
                     if uf == 'AL' and v2 > 0:
-                        # Assumimos que Valor 1 (+ juros) é a guia principal (ICMS) e Valor 2 é o FCP
                         v1_chave = round(v1 + jr, 2)
                         v2_chave = round(v2, 2)
                         
@@ -96,7 +113,7 @@ if pdf_file and excel_file:
                             valor_para_nomes[v2_chave].append(f"{nome_base}_FECP")
                             
                     else:
-                        # REGRA PADRÃO (Soma tudo)
+                        # REGRA PADRÃO
                         v_total = round(v1 + v2 + jr, 2)
                         if v_total > 0:
                             valor_para_nomes[v_total].append(nome_base)
@@ -121,20 +138,16 @@ if pdf_file and excel_file:
                         if valor_chave is not None and valor_chave in valor_para_nomes and len(valor_para_nomes[valor_chave]) > 0:
                             nome_arquivo_base = valor_para_nomes[valor_chave].pop(0)
                             
-                            # Escreve o PDF individual na memória
                             pdf_buffer = io.BytesIO()
                             writer = PdfWriter()
                             writer.add_page(pagina)
                             writer.write(pdf_buffer)
                             
-                            # Salva o PDF dentro do ZIP
                             zip_file.writestr(f"{nome_arquivo_base}.pdf", pdf_buffer.getvalue())
                             nomes_encontrados += 1
 
                 if nomes_encontrados > 0:
                     st.success(f"Sucesso! {nomes_encontrados} comprovantes foram separados.")
-                    
-                    # Botão de Download do arquivo ZIP
                     st.download_button(
                         label="📦 Baixar Arquivo ZIP",
                         data=zip_buffer.getvalue(),
