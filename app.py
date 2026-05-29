@@ -64,18 +64,43 @@ if pdf_file and excel_file:
                 df['_v2'] = df['VALOR 2'].apply(string_para_float) if 'VALOR 2' in df.columns else 0.0
                 df['_jr'] = df['JUROS/MULTA'].apply(string_para_float) if 'JUROS/MULTA' in df.columns else 0.0
                 
-                df['VALOR_CHAVE'] = (df['_v1'] + df['_v2'] + df['_jr']).round(2)
-                df = df[df['VALOR_CHAVE'] > 0].copy()
+                # Identifica a coluna UF para aplicar as regras de exceção
+                if 'UF' in df.columns:
+                    df['UF'] = df['UF'].astype(str).str.strip().str.upper()
+                else:
+                    df['UF'] = ''
+
                 df = df.dropna(subset=['NF', 'FILIAL'])
-                
                 df['FILIAL'] = df['FILIAL'].astype(str).str.strip().str.replace(' ', '_')
                 df['NF'] = df['NF'].astype(str).str.strip()
                 df['NOME_ARQUIVO'] = df['FILIAL'] + '_' + df['NF']
 
                 valor_para_nomes = defaultdict(list)
+                
                 for _, row in df.iterrows():
-                    valor_para_nomes[row['VALOR_CHAVE']].append(row['NOME_ARQUIVO'])
+                    nome_base = row['NOME_ARQUIVO']
+                    uf = row['UF']
+                    v1 = row['_v1']
+                    v2 = row['_v2']
+                    jr = row['_jr']
                     
+                    # REGRA DE EXCEÇÃO: ALAGOAS (AL)
+                    if uf == 'AL' and v2 > 0:
+                        # Assumimos que Valor 1 (+ juros) é a guia principal (ICMS) e Valor 2 é o FCP
+                        v1_chave = round(v1 + jr, 2)
+                        v2_chave = round(v2, 2)
+                        
+                        if v1_chave > 0:
+                            valor_para_nomes[v1_chave].append(f"{nome_base}_ICMS")
+                        if v2_chave > 0:
+                            valor_para_nomes[v2_chave].append(f"{nome_base}_FECP")
+                            
+                    else:
+                        # REGRA PADRÃO (Soma tudo)
+                        v_total = round(v1 + v2 + jr, 2)
+                        if v_total > 0:
+                            valor_para_nomes[v_total].append(nome_base)
+                            
             except Exception as e:
                 st.error(f"Erro ao ler a planilha. Verifique as colunas. Detalhe: {e}")
                 st.stop()
