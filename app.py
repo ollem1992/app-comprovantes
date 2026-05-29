@@ -72,9 +72,34 @@ if pdf_file and excel_file:
                 df['NF'] = df['NF'].astype(str).str.strip()
                 df['NOME_ARQUIVO'] = df['FILIAL'] + '_' + df['NF']
 
-                valor_para_nomes = defaultdict(list)
-                for _, row in df.iterrows():
-                    valor_para_nomes[row['VALOR_CHAVE']].append(row['NOME_ARQUIVO'])
+               valor_para_nomes = defaultdict(list)
+
+for _, row in df.iterrows():
+
+    # pega uf independente do nome da coluna
+    uf = str(
+        row.get('UF', row.get('uf', ''))
+    ).strip().upper()
+
+    nome = row['NOME_ARQUIVO']
+
+    # ===== ALAGOAS =====
+    if uf == 'AL':
+
+        v1 = round(float(row['_v1']), 2)
+        v2 = round(float(row['_v2']), 2)
+
+        if v1 > 0:
+            valor_para_nomes[v1].append(nome)
+
+        if v2 > 0:
+            valor_para_nomes[v2].append(nome)
+
+    # ===== RESTANTE =====
+    else:
+        valor_para_nomes[
+            round(row['VALOR_CHAVE'], 2)
+        ].append(nome)
                     
             except Exception as e:
                 st.error(f"Erro ao ler a planilha. Verifique as colunas. Detalhe: {e}")
