@@ -72,39 +72,9 @@ if pdf_file and excel_file:
                 df['NF'] = df['NF'].astype(str).str.strip()
                 df['NOME_ARQUIVO'] = df['FILIAL'] + '_' + df['NF']
 
-               valor_para_nomes = defaultdict(list)
-
-for _, row in df.iterrows():
-
-    uf = str(row.get('UF', '')).strip().upper()
-    nome_arquivo = row['NOME_ARQUIVO']
-
-    # REGRA ESPECIAL PARA ALAGOAS
-    if uf == 'AL':
-
-        # Busca separadamente o Valor 1
-        if row['_v1'] > 0:
-            valor_para_nomes[round(row['_v1'], 2)].append(
-                f"{nome_arquivo}_VALOR1"
-            )
-
-        # Busca separadamente o Valor 2
-        if row['_v2'] > 0:
-            valor_para_nomes[round(row['_v2'], 2)].append(
-                f"{nome_arquivo}_VALOR2"
-            )
-
-        # Se existir só juros/multa
-        if row['_jr'] > 0 and row['_v1'] == 0 and row['_v2'] == 0:
-            valor_para_nomes[round(row['_jr'], 2)].append(
-                f"{nome_arquivo}_JUROS"
-            )
-
-    # TODOS OS OUTROS ESTADOS (mantém regra atual)
-    else:
-        valor_para_nomes[row['VALOR_CHAVE']].append(
-            nome_arquivo
-        )
+                valor_para_nomes = defaultdict(list)
+                for _, row in df.iterrows():
+                    valor_para_nomes[row['VALOR_CHAVE']].append(row['NOME_ARQUIVO'])
                     
             except Exception as e:
                 st.error(f"Erro ao ler a planilha. Verifique as colunas. Detalhe: {e}")
