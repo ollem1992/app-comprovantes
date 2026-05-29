@@ -61,61 +61,20 @@ if pdf_file and excel_file:
                 df.columns = df.columns.str.strip().str.upper()
                 
                 df['_v1'] = df['VALOR 1'].apply(string_para_float) if 'VALOR 1' in df.columns else 0.0
-df['_v2'] = df['VALOR 2'].apply(string_para_float) if 'VALOR 2' in df.columns else 0.0
-df['_jr'] = df['JUROS/MULTA'].apply(string_para_float) if 'JUROS/MULTA' in df.columns else 0.0
+                df['_v2'] = df['VALOR 2'].apply(string_para_float) if 'VALOR 2' in df.columns else 0.0
+                df['_jr'] = df['JUROS/MULTA'].apply(string_para_float) if 'JUROS/MULTA' in df.columns else 0.0
+                
+                df['VALOR_CHAVE'] = (df['_v1'] + df['_v2'] + df['_jr']).round(2)
+                df = df[df['VALOR_CHAVE'] > 0].copy()
+                df = df.dropna(subset=['NF', 'FILIAL'])
+                
+                df['FILIAL'] = df['FILIAL'].astype(str).str.strip().str.replace(' ', '_')
+                df['NF'] = df['NF'].astype(str).str.strip()
+                df['NOME_ARQUIVO'] = df['FILIAL'] + '_' + df['NF']
 
-df = df.dropna(subset=['NF', 'FILIAL'])
-
-df['FILIAL'] = (
-    df['FILIAL']
-    .astype(str)
-    .str.strip()
-    .str.replace(' ', '_')
-)
-
-df['NF'] = df['NF'].astype(str).str.strip()
-
-df['UF'] = (
-    df['UF']
-    .astype(str)
-    .str.strip()
-    .str.upper()
-)
-
-df['NOME_ARQUIVO'] = df['FILIAL'] + '_' + df['NF']
-
-valor_para_nomes = defaultdict(list)
-
-for _, row in df.iterrows():
-
-    nome = row['NOME_ARQUIVO']
-    uf = row['UF']
-
-    # ===== ALAGOAS =====
-    if uf == 'AL':
-
-        # procura Valor 1 separado
-        if row['_v1'] > 0:
-            valor_para_nomes[round(row['_v1'], 2)].append(nome)
-
-        # procura Valor 2 separado
-        if row['_v2'] > 0:
-            valor_para_nomes[round(row['_v2'], 2)].append(nome)
-
-        # juros separado (se existir)
-        if row['_jr'] > 0:
-            valor_para_nomes[round(row['_jr'], 2)].append(nome)
-
-    # ===== RESTANTE DOS ESTADOS =====
-    else:
-
-        valor_total = round(
-            row['_v1'] + row['_v2'] + row['_jr'],
-            2
-        )
-
-        if valor_total > 0:
-            valor_para_nomes[valor_total].append(nome)
+                valor_para_nomes = defaultdict(list)
+                for _, row in df.iterrows():
+                    valor_para_nomes[row['VALOR_CHAVE']].append(row['NOME_ARQUIVO'])
                     
             except Exception as e:
                 st.error(f"Erro ao ler a planilha. Verifique as colunas. Detalhe: {e}")
