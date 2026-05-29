@@ -33,37 +33,29 @@ def string_para_float(valor_str):
     try: return round(float(v), 2)
     except ValueError: return 0.0
 
-def extrair_valor_do_texto(texto_pagina):
-    # 1. Procura TODAS as ocorrências de palavras-chave (não só a primeira)
+def extrair_todos_os_valores(texto_pagina):
+    """Extrai TODOS os valores financeiros da página, sem escolher o maior."""
+    valores_encontrados = set()
+    
+    # 1. Procura com palavras-chave
     matches = re.findall(r"(?:Valor\s+do\s+documento|Valor\s+pago|Valor\s+cobrado|Valor|Total(?:\s+a\s+pagar)?)[^\dR$]*R\$?\s*([\d\.,]+)", texto_pagina, re.IGNORECASE)
-    
-    valores_validos = []
-    if matches:
-        for v_str in matches:
-            v = string_para_float(v_str)
-            if v > 0:
-                valores_validos.append(v)
-    
-    if valores_validos:
-        return max(valores_validos) # Pega o maior valor encontrado (ignora campos de desconto zerados)
+    for v_str in matches:
+        v = string_para_float(v_str)
+        if v > 0: valores_encontrados.add(v)
         
     # 2. Fallback: Qualquer valor na página com R$
-    valores_encontrados = re.findall(r'R\$\s*([\d\.,]{3,})', texto_pagina)
-    if valores_encontrados:
-        valores_float = [string_para_float(v) for v in valores_encontrados]
-        valores_validos = [v for v in valores_float if v > 0]
-        if valores_validos: 
-            return max(valores_validos)
+    matches_r = re.findall(r'R\$\s*([\d\.,]{3,})', texto_pagina)
+    for v_str in matches_r:
+        v = string_para_float(v_str)
+        if v > 0: valores_encontrados.add(v)
 
     # 3. Fallback Extremo para comprovantes que não usam "R$" (Ex: Itaú)
     numeros_soltos = re.findall(r'\b\d{1,3}(?:\.\d{3})*,\d{2}\b', texto_pagina)
-    if numeros_soltos:
-        floats_soltos = [string_para_float(n) for n in numeros_soltos]
-        floats_validos = [f for f in floats_soltos if f > 0]
-        if floats_validos: 
-            return max(floats_validos)
+    for v_str in numeros_soltos:
+        v = string_para_float(v_str)
+        if v > 0: valores_encontrados.add(v)
 
-    return None
+    return list(valores_encontrados)
 
 # --- Upload dos Arquivos ---
 pdf_file = st.file_uploader("1. Selecione o PDF dos Comprovantes", type=["pdf"])
@@ -82,7 +74,6 @@ if pdf_file and excel_file:
                 df['_v2'] = df['VALOR 2'].apply(string_para_float) if 'VALOR 2' in df.columns else 0.0
                 df['_jr'] = df['JUROS/MULTA'].apply(string_para_float) if 'JUROS/MULTA' in df.columns else 0.0
                 
-                # Identifica a coluna UF
                 if 'UF' in df.columns:
                     df['UF'] = df['UF'].astype(str).str.strip().str.upper()
                 else:
@@ -133,19 +124,23 @@ if pdf_file and excel_file:
                         texto = pagina.extract_text()
                         if not texto: continue
                         
-                        valor_chave = extrair_valor_do_texto(texto)
+                        # Extrai todos os valores da página
+                        valores_na_pagina = extrair_todos_os_valores(texto)
                         
-                        if valor_chave is not None and valor_chave in valor_para_nomes and len(valor_para_nomes[valor_chave]) > 0:
-                            nome_arquivo_base = valor_para_nomes[valor_chave].pop(0)
-                            
-                            pdf_buffer = io.BytesIO()
-                            writer = PdfWriter()
-                            writer.add_page(pagina)
-                            writer.write(pdf_buffer)
-                            
-                            zip_file.writestr(f"{nome_arquivo_base}.pdf", pdf_buffer.getvalue())
-                            nomes_encontrados += 1
-
+                        # Testa se algum dos valores da página existe na nossa planilha
+                        for valor_chave in valores_na_pagina:
+                            if valor_chave in valor_para_nomes and len(valor_para_nomes[valor_chave]) > 0:
+                                nome_arquivo_base = valor_para_nomes[valor_chave].pop(0)
+                                
+                                pdf_buffer = io.BytesIO()
+                                writer = PdfWriter()
+                                writer.add_page(pagina)
+                                writer.write(pdf_buffer)
+                                
+                                zip_file.writestr(f"{nome_arquivo_base}.pdf", pdf_buffer.getvalue())
+                                nomes_encontrados += 1
+                                break # Achou o comprovante desta página, vai para a próxima página
+                                
                 if nomes_encontrados > 0:
                     st.success(f"Sucesso! {nomes_encontrados} comprovantes foram separados.")
                     st.download_button(
